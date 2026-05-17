@@ -353,11 +353,11 @@ Real-hardware vLLM smoke (running `vllm serve` against a real Gemma 4 31B
 GPU host and exercising the gateway end-to-end) is a documented follow-up
 and is not part of this verification run.
 
-95 tests cover profiles, server limits, bind policy, errors, runtime
+100 tests cover profiles, server limits, bind policy, errors, runtime
 state, middleware, policy validation, vLLM HTTP client, Anthropic
 adapter, server app foundation, health, metrics, OpenAI endpoints,
-Anthropic endpoints, doctor, benchmarking, launch helper, CLI, and bench
-CLI.
+Anthropic endpoints, doctor, benchmarking, launch helper, CLI, bench
+CLI, and release scripts.
 
 ## Author
 
