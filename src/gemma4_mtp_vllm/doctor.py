@@ -15,6 +15,7 @@ async def build_report(
     profile: ModelProfile,
     vllm_base_url: str,
     transport: httpx.BaseTransport | None = None,
+    served_model_name: str | None = None,
 ) -> dict[str, Any]:
     if transport is not None:
         http = httpx.AsyncClient(transport=transport, base_url=vllm_base_url)
@@ -22,7 +23,11 @@ async def build_report(
         http = httpx.AsyncClient(base_url=vllm_base_url)
     client = VllmClient(http=http, base_url=vllm_base_url)
     try:
-        return await _build_report(client=client, profile=profile)
+        return await _build_report(
+            client=client,
+            profile=profile,
+            served_model_name=served_model_name,
+        )
     finally:
         await client.aclose()
 
@@ -31,6 +36,7 @@ async def _build_report(
     *,
     client: VllmClient,
     profile: ModelProfile,
+    served_model_name: str | None = None,
 ) -> dict[str, Any]:
     vllm_status: dict[str, Any] = {"status": "unreachable", "version": None}
     target_served = False
@@ -49,7 +55,7 @@ async def _build_report(
         try:
             models_body = await client.list_models()
             ids = {entry.get("id") for entry in models_body.get("data") or []}
-            target_served = profile.target in ids
+            target_served = profile.target in ids or served_model_name in ids
         except (VllmHttpError, httpx.HTTPError):
             target_served = False
 
@@ -62,6 +68,7 @@ async def _build_report(
         "ok": ok,
         "profile": profile.name,
         "target_model": profile.target,
+        "served_model_name": served_model_name,
         "drafter": profile.drafter,
         "drafter_configured": profile.drafter,
         "drafter_loaded": "unknown",

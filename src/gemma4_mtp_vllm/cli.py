@@ -30,6 +30,7 @@ from gemma4_mtp_vllm.profiles import (
     resolve_profile,
 )
 from gemma4_mtp_vllm.server.bind_policy import bind_host_requires_api_key
+from gemma4_mtp_vllm.server.app import DEFAULT_MODEL_ALIAS
 from gemma4_mtp_vllm.server.limits import ServerLimits
 
 app = typer.Typer(add_completion=False, help="Gemma 4 31B MTP vLLM sidecar gateway")
@@ -58,7 +59,7 @@ def _request_body(
     top_p: float,
 ) -> dict:
     return {
-        "model": profile.target,
+        "model": DEFAULT_MODEL_ALIAS,
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": max_tokens,
         "temperature": temperature,
@@ -151,6 +152,7 @@ def doctor(
             profile=selected,
             vllm_base_url=vllm_base_url,
             transport=transport,
+            served_model_name=DEFAULT_MODEL_ALIAS,
         )
     )
     # Emit single-line JSON so the test seam (splitlines()[-1]) yields a
@@ -173,6 +175,7 @@ def launch(
         host=host,
         port=port,
         enable_mtp=not no_mtp,
+        served_model_name=DEFAULT_MODEL_ALIAS,
     )
     if print_only:
         typer.echo(shlex.join(args))
@@ -249,7 +252,7 @@ def generate(
             response = await http.post(
                 "/v1/chat/completions",
                 json={
-                    "model": selected.target,
+                    "model": DEFAULT_MODEL_ALIAS,
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": max_tokens,
                     "temperature": temperature,

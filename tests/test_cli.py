@@ -20,6 +20,7 @@ def test_launch_command_prints_argv():
     assert "vllm" in result.stdout
     assert "serve" in result.stdout
     assert "google/gemma-4-31B-it" in result.stdout
+    assert "--served-model-name gemma-4-31b-mtp" in result.stdout
 
 
 def test_launch_command_prints_shell_safe_mtp_argv():

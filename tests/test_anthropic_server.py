@@ -68,7 +68,7 @@ def test_anthropic_messages_returns_message_envelope():
     assert body["stop_reason"] == "end_turn"
     assert body["id"].startswith("msg_")
     forwarded = captured["body"]
-    assert forwarded["model"] == "google/gemma-4-31B-it"
+    assert forwarded["model"] == "gemma-4-31b-mtp"
     assert forwarded["messages"][0] == {"role": "system", "content": "Be concise."}
     assert forwarded["max_tokens"] == 8
 

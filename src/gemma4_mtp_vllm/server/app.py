@@ -117,9 +117,10 @@ def _prepare_openai_body(
     payload: dict[str, Any],
     profile: ModelProfile,
     limits: ServerLimits,
+    upstream_model: str,
 ) -> dict[str, Any]:
     body = dict(payload)
-    body["model"] = profile.target
+    body["model"] = upstream_model
     requested_max = body.get("max_tokens", limits.max_output_tokens)
     if not isinstance(requested_max, int) or requested_max <= 0:
         requested_max = limits.max_output_tokens
@@ -177,6 +178,7 @@ def create_app(
     selected = resolve_profile(profile_name, profile_set)
     runtime_state = RuntimeState(max_queue_size=server_limits.max_queue_size)
     aliases = _aliases(profile_set, selected, model_alias)
+    served_model_name = model_alias
 
     if vllm_transport is not None:
         http = httpx.AsyncClient(transport=vllm_transport, base_url=vllm_base_url)
@@ -254,6 +256,7 @@ def create_app(
             "status": "ready" if vllm_status.get("status") == "ok" else "degraded",
             "profile": selected.name,
             "target_model": selected.target,
+            "served_model_name": served_model_name,
             "drafter": selected.drafter,
             "num_speculative_tokens": selected.num_speculative_tokens,
             "tensor_parallel_size": selected.tensor_parallel_size,
@@ -336,7 +339,12 @@ def create_app(
                 message=f"model {payload.get('model')!r} is not available",
             )
 
-        body = _prepare_openai_body(payload, selected, server_limits)
+        body = _prepare_openai_body(
+            payload,
+            selected,
+            server_limits,
+            upstream_model=served_model_name,
+        )
         streaming = bool(payload.get("stream"))
         slot = await _acquire_slot_or_error(runtime_state)
         if isinstance(slot, JSONResponse):
@@ -402,7 +410,7 @@ def create_app(
                 message=f"model {payload.get('model')!r} is not available",
             )
         body = dict(payload)
-        body["model"] = selected.target
+        body["model"] = served_model_name
         body["max_tokens"] = min(
             int(body.get("max_tokens") or server_limits.max_output_tokens),
             server_limits.max_output_tokens,
@@ -461,7 +469,7 @@ def create_app(
             )
 
         openai_body = anthropic_request_to_openai(
-            payload, openai_model=selected.target,
+            payload, openai_model=served_model_name,
         )
         openai_body["max_tokens"] = min(
             int(openai_body.get("max_tokens") or server_limits.max_output_tokens),

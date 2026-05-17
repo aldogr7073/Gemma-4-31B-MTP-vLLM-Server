@@ -35,6 +35,15 @@ def test_build_args_enable_gemma4_reasoning_parser():
     assert args[parser_idx + 1] == "gemma4"
 
 
+def test_build_args_can_set_served_model_name():
+    args = build_vllm_serve_args(
+        profile=_profile(),
+        served_model_name="gemma-4-31b-mtp",
+    )
+    served_idx = args.index("--served-model-name")
+    assert args[served_idx + 1] == "gemma-4-31b-mtp"
+
+
 def test_build_args_round_trip_through_shell_join():
     args = build_vllm_serve_args(profile=_profile())
     assert shlex.split(shlex.join(args)) == args

@@ -11,6 +11,7 @@ def build_vllm_serve_args(
     host: str = "127.0.0.1",
     port: int = 8000,
     enable_mtp: bool = True,
+    served_model_name: str | None = None,
 ) -> list[str]:
     args: list[str] = [
         "vllm",
@@ -29,6 +30,8 @@ def build_vllm_serve_args(
         "--reasoning-parser",
         "gemma4",
     ]
+    if served_model_name:
+        args.extend(["--served-model-name", served_model_name])
     if enable_mtp:
         spec = {
             "method": "mtp",

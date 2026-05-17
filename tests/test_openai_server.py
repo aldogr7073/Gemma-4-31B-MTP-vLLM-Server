@@ -85,7 +85,7 @@ def test_chat_completion_pass_through():
     assert response.status_code == 200
     body = response.json()
     assert body["choices"][0]["message"]["content"] == "Hi"
-    assert CAPTURED["body"]["model"] == "google/gemma-4-31B-it"
+    assert CAPTURED["body"]["model"] == "gemma-4-31b-mtp"
     assert CAPTURED["body"]["max_tokens"] == 32
 
 

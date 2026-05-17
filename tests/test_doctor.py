@@ -92,6 +92,32 @@ async def test_doctor_rejects_profile_name_as_served_target():
 
 
 @pytest.mark.asyncio
+async def test_doctor_ok_when_served_model_name_listed():
+    def handler(request):
+        if request.url.path == "/health":
+            return httpx.Response(200)
+        if request.url.path == "/version":
+            return httpx.Response(200, json={"version": "0.21.0"})
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={
+                "data": [
+                    {"id": "gemma-4-31b-mtp"},
+                ],
+            })
+        return httpx.Response(404)
+
+    report = await build_report(
+        profile=_profile(),
+        vllm_base_url="http://vllm.local:8000",
+        transport=httpx.MockTransport(handler),
+        served_model_name="gemma-4-31b-mtp",
+    )
+    assert report["ok"] is True
+    assert report["target_served"] is True
+    assert report["served_model_name"] == "gemma-4-31b-mtp"
+
+
+@pytest.mark.asyncio
 async def test_doctor_marks_not_ok_when_target_missing():
     def handler(request):
         if request.url.path == "/health":
