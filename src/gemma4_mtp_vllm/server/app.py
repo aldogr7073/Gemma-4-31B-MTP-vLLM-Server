@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from gemma4_mtp_vllm import REQUIRED_VLLM_MIN_VERSION, __version__
 from gemma4_mtp_vllm.backend.vllm_client import VllmClient, VllmHttpError
@@ -238,7 +238,7 @@ def create_app(
         }
 
     @app.post("/v1/chat/completions")
-    async def chat_completions(request: Request) -> JSONResponse:
+    async def chat_completions(request: Request):
         payload = await _bounded_json(request, server_limits.max_body_bytes)
         if isinstance(payload, JSONResponse):
             return payload
@@ -258,6 +258,29 @@ def create_app(
             )
 
         body = _prepare_openai_body(payload, selected, server_limits)
+        streaming = bool(payload.get("stream"))
+
+        if streaming:
+            async def event_stream():
+                try:
+                    async for chunk in vllm.chat_completion_stream(body):
+                        if chunk.get("_done"):
+                            yield "data: [DONE]\n\n"
+                            return
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                except VllmHttpError as exc:
+                    runtime_state.record_backend_error("vllm_http_error")
+                    error = {
+                        "error": {
+                            "code": "backend_unavailable",
+                            "message": f"vllm returned {exc.status_code}",
+                        }
+                    }
+                    yield f"data: {json.dumps(error)}\n\n"
+                    yield "data: [DONE]\n\n"
+
+            return StreamingResponse(event_stream(), media_type="text/event-stream")
+
         try:
             response = await vllm.chat_completion(body)
         except VllmHttpError as exc:
@@ -273,6 +296,34 @@ def create_app(
             generation_seconds=0.0,
             batch_size=1,
         )
+        return JSONResponse(response)
+
+    @app.post("/v1/completions")
+    async def completions(request: Request) -> JSONResponse:
+        payload = await _bounded_json(request, server_limits.max_body_bytes)
+        if isinstance(payload, JSONResponse):
+            return payload
+        if not _alias_known(payload.get("model"), aliases):
+            return protocol_error_response(
+                status_code=404,
+                code="model_not_found",
+                message=f"model {payload.get('model')!r} is not available",
+            )
+        body = dict(payload)
+        body["model"] = selected.target
+        body["max_tokens"] = min(
+            int(body.get("max_tokens") or server_limits.max_output_tokens),
+            server_limits.max_output_tokens,
+        )
+        try:
+            response = await vllm.completion(body)
+        except VllmHttpError as exc:
+            runtime_state.record_backend_error("vllm_http_error")
+            return protocol_error_response(
+                status_code=503,
+                code="backend_unavailable",
+                message=f"vllm returned {exc.status_code}",
+            )
         return JSONResponse(response)
 
     return app
