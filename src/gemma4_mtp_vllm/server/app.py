@@ -110,6 +110,61 @@ def create_app(
             "vllm_version": vllm_version,
         }
 
+    @app.get("/health")
+    async def health() -> dict[str, Any]:
+        vllm_status = await _probe_vllm(vllm)
+        if vllm_status.get("status") == "ok":
+            try:
+                version_body = await vllm.version()
+                vllm_status["version"] = version_body.get("version")
+            except VllmHttpError:
+                vllm_status["version"] = None
+        return {
+            "status": "ready" if vllm_status.get("status") == "ok" else "degraded",
+            "profile": selected.name,
+            "target_model": selected.target,
+            "drafter": selected.drafter,
+            "num_speculative_tokens": selected.num_speculative_tokens,
+            "tensor_parallel_size": selected.tensor_parallel_size,
+            "gpu_memory_utilization": selected.gpu_memory_utilization,
+            "max_model_len": selected.max_model_len,
+            "model_aliases": aliases,
+            "vllm": vllm_status,
+            "bind": {"host": bind_host},
+            "limits": server_limits.public_dict(),
+            "runtime": runtime_state.snapshot(),
+            "auth_modes": ["bearer", "x-api-key"],
+            "tools_supported": False,
+            "true_token_streaming": True,
+            "continuous_batching": True,
+            "token_counting": "estimated_word_count",
+        }
+
+    @app.get("/metrics")
+    async def metrics() -> Response:
+        if not server_limits.metrics_enabled:
+            return Response(status_code=404)
+        snapshot = runtime_state.snapshot()
+        body = (
+            "# TYPE gemma4_mtp_active_requests gauge\n"
+            f"gemma4_mtp_active_requests {snapshot['active_requests']}\n"
+            "# TYPE gemma4_mtp_queued_requests gauge\n"
+            f"gemma4_mtp_queued_requests {snapshot['queued_requests']}\n"
+            "# TYPE gemma4_mtp_total_requests counter\n"
+            f"gemma4_mtp_total_requests {snapshot['total_requests']}\n"
+            "# TYPE gemma4_mtp_rejected_requests counter\n"
+            f"gemma4_mtp_rejected_requests {snapshot['rejected_requests']}\n"
+            "# TYPE gemma4_mtp_backend_errors counter\n"
+            f"gemma4_mtp_backend_errors {snapshot['backend_errors']}\n"
+            "# TYPE gemma4_mtp_generation_tokens_total counter\n"
+            f"gemma4_mtp_generation_tokens_total {snapshot['generation_tokens']}\n"
+            "# TYPE gemma4_mtp_generation_seconds_total counter\n"
+            f"gemma4_mtp_generation_seconds_total {snapshot['generation_seconds']}\n"
+            "# TYPE gemma4_mtp_batch_requests_total counter\n"
+            f"gemma4_mtp_batch_requests_total {snapshot['batch_requests']}\n"
+        )
+        return Response(content=body, media_type="text/plain; version=0.0.4")
+
     return app
 
 
