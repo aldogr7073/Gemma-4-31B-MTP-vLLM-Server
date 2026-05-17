@@ -26,11 +26,14 @@ def build_vllm_serve_args(
         str(profile.max_model_len),
         "--gpu-memory-utilization",
         f"{profile.gpu_memory_utilization:.2f}",
+        "--reasoning-parser",
+        "gemma4",
     ]
     if enable_mtp:
         spec = {
+            "method": "mtp",
             "model": profile.drafter,
             "num_speculative_tokens": profile.num_speculative_tokens,
         }
-        args.extend(["--speculative-config", json.dumps(spec)])
+        args.extend(["--speculative-config", json.dumps(spec, separators=(",", ":"))])
     return args

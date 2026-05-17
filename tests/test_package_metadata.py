@@ -25,12 +25,11 @@ def test_version_matches_pyproject():
 
 
 def test_required_vllm_min_version_present():
-    assert gemma4_mtp_vllm.REQUIRED_VLLM_MIN_VERSION.startswith("0.")
+    assert gemma4_mtp_vllm.REQUIRED_VLLM_MIN_VERSION == "0.21.0"
 
 
 def test_vllm_optional_extra_lists_min_version():
     data = _pyproject()
     extras = data["project"]["optional-dependencies"]
     vllm_entries = extras.get("vllm", [])
-    expected = f"vllm>={gemma4_mtp_vllm.REQUIRED_VLLM_MIN_VERSION}"
-    assert expected in vllm_entries
+    assert "vllm>=0.21.0,<0.22.0" in vllm_entries

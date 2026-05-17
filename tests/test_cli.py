@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from pathlib import Path
 
 import httpx
@@ -18,6 +19,18 @@ def test_launch_command_prints_argv():
     assert "vllm" in result.stdout
     assert "serve" in result.stdout
     assert "google/gemma-4-31B-it" in result.stdout
+
+
+def test_launch_command_prints_shell_safe_mtp_argv():
+    result = runner.invoke(app, ["launch", "--profile", "safe80", "--print-only"])
+    assert result.exit_code == 0
+    assert "--speculative-config" in result.stdout
+    assert '"method":"mtp"' in result.stdout
+
+    parsed = shlex.split(result.stdout.strip())
+    spec_idx = parsed.index("--speculative-config")
+    spec = json.loads(parsed[spec_idx + 1])
+    assert spec["method"] == "mtp"
 
 
 def test_doctor_command_emits_json(monkeypatch):

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shlex
 import sys
 import time
 from dataclasses import replace
@@ -174,7 +175,7 @@ def launch(
         enable_mtp=not no_mtp,
     )
     if print_only:
-        typer.echo(" ".join(args))
+        typer.echo(shlex.join(args))
         return
     os.execvp(args[0], args)
 
