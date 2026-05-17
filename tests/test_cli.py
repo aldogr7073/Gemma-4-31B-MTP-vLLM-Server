@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import shlex
 from pathlib import Path
@@ -35,20 +36,17 @@ def test_launch_command_prints_shell_safe_mtp_argv():
 
 def test_doctor_command_emits_json(monkeypatch):
     def fake_run(coro):
-        import asyncio
-
         return asyncio.get_event_loop().run_until_complete(coro)
 
     def handler(request):
         if request.url.path == "/health":
             return httpx.Response(200, json={"status": "ok"})
         if request.url.path == "/version":
-            return httpx.Response(200, json={"version": "0.11.0"})
+            return httpx.Response(200, json={"version": "0.21.0"})
         if request.url.path == "/v1/models":
             return httpx.Response(200, json={
                 "data": [
                     {"id": "google/gemma-4-31B-it"},
-                    {"id": "google/gemma-4-31B-it-assistant"},
                 ],
             })
         return httpx.Response(404)
@@ -65,7 +63,9 @@ def test_doctor_command_emits_json(monkeypatch):
     assert result.exit_code == 0
     payload = json.loads(result.stdout.strip().splitlines()[-1])
     assert payload["ok"] is True
-    assert payload["target_loaded"] is True
+    assert payload["version_ok"] is True
+    assert payload["target_served"] is True
+    assert payload["drafter_loaded"] == "unknown"
 
 
 def test_serve_command_rejects_non_loopback_without_key():

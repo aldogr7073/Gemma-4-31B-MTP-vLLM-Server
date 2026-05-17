@@ -12,17 +12,16 @@ def _profile():
 
 
 @pytest.mark.asyncio
-async def test_doctor_reports_ok_when_vllm_lists_target_and_drafter():
+async def test_doctor_ok_when_target_served_and_drafter_not_listed():
     def handler(request):
         if request.url.path == "/health":
-            return httpx.Response(200, json={"status": "ok"})
+            return httpx.Response(200)
         if request.url.path == "/version":
-            return httpx.Response(200, json={"version": "0.11.0"})
+            return httpx.Response(200, json={"version": "0.21.0"})
         if request.url.path == "/v1/models":
             return httpx.Response(200, json={
                 "data": [
                     {"id": "google/gemma-4-31B-it"},
-                    {"id": "google/gemma-4-31B-it-assistant"},
                 ],
             })
         return httpx.Response(404)
@@ -37,9 +36,59 @@ async def test_doctor_reports_ok_when_vllm_lists_target_and_drafter():
     assert report["target_model"] == "google/gemma-4-31B-it"
     assert report["drafter"] == "google/gemma-4-31B-it-assistant"
     assert report["vllm"]["status"] == "ok"
-    assert report["vllm"]["version"] == "0.11.0"
-    assert report["target_loaded"] is True
-    assert report["drafter_loaded"] is True
+    assert report["vllm"]["version"] == "0.21.0"
+    assert report["version_ok"] is True
+    assert report["target_served"] is True
+    assert report["drafter_configured"] == "google/gemma-4-31B-it-assistant"
+    assert report["drafter_loaded"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_doctor_rejects_old_vllm_version():
+    def handler(request):
+        if request.url.path == "/health":
+            return httpx.Response(200)
+        if request.url.path == "/version":
+            return httpx.Response(200, json={"version": "0.20.2"})
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={
+                "data": [
+                    {"id": "google/gemma-4-31B-it"},
+                ],
+            })
+        return httpx.Response(404)
+
+    report = await build_report(
+        profile=_profile(),
+        vllm_base_url="http://vllm.local:8000",
+        transport=httpx.MockTransport(handler),
+    )
+    assert report["ok"] is False
+    assert report["version_ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_doctor_accepts_profile_name_as_served_target():
+    def handler(request):
+        if request.url.path == "/health":
+            return httpx.Response(200)
+        if request.url.path == "/version":
+            return httpx.Response(200, json={"version": "0.21.0"})
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={
+                "data": [
+                    {"id": "safe80"},
+                ],
+            })
+        return httpx.Response(404)
+
+    report = await build_report(
+        profile=_profile(),
+        vllm_base_url="http://vllm.local:8000",
+        transport=httpx.MockTransport(handler),
+    )
+    assert report["ok"] is True
+    assert report["target_served"] is True
 
 
 @pytest.mark.asyncio
@@ -48,7 +97,7 @@ async def test_doctor_marks_not_ok_when_target_missing():
         if request.url.path == "/health":
             return httpx.Response(200, json={"status": "ok"})
         if request.url.path == "/version":
-            return httpx.Response(200, json={"version": "0.11.0"})
+            return httpx.Response(200, json={"version": "0.21.0"})
         if request.url.path == "/v1/models":
             return httpx.Response(200, json={"data": []})
         return httpx.Response(404)
@@ -59,7 +108,7 @@ async def test_doctor_marks_not_ok_when_target_missing():
         transport=httpx.MockTransport(handler),
     )
     assert report["ok"] is False
-    assert report["target_loaded"] is False
+    assert report["target_served"] is False
 
 
 @pytest.mark.asyncio

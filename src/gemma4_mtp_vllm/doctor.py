@@ -7,6 +7,7 @@ import httpx
 from gemma4_mtp_vllm import REQUIRED_VLLM_MIN_VERSION, __version__
 from gemma4_mtp_vllm.backend.vllm_client import VllmClient, VllmHttpError
 from gemma4_mtp_vllm.profiles import ModelProfile
+from gemma4_mtp_vllm.versioning import version_at_least
 
 
 async def build_report(
@@ -31,14 +32,13 @@ async def _build_report(
     client: VllmClient,
     profile: ModelProfile,
 ) -> dict[str, Any]:
-    vllm_status: dict[str, Any] = {"status": "unreachable"}
-    target_loaded = False
-    drafter_loaded = False
+    vllm_status: dict[str, Any] = {"status": "unreachable", "version": None}
+    target_served = False
     try:
         await client.health()
-        vllm_status = {"status": "ok"}
+        vllm_status["status"] = "ok"
     except (VllmHttpError, httpx.HTTPError):
-        vllm_status = {"status": "unreachable"}
+        vllm_status["status"] = "unreachable"
 
     if vllm_status.get("status") == "ok":
         try:
@@ -49,23 +49,27 @@ async def _build_report(
         try:
             models_body = await client.list_models()
             ids = {entry.get("id") for entry in models_body.get("data") or []}
-            target_loaded = profile.target in ids
-            drafter_loaded = profile.drafter in ids
+            target_served = profile.target in ids or profile.name in ids
         except (VllmHttpError, httpx.HTTPError):
-            target_loaded = False
-            drafter_loaded = False
+            target_served = False
 
-    ok = vllm_status.get("status") == "ok" and target_loaded and drafter_loaded
+    version_ok = version_at_least(
+        vllm_status.get("version"),
+        REQUIRED_VLLM_MIN_VERSION,
+    )
+    ok = vllm_status.get("status") == "ok" and version_ok and target_served
     return {
         "ok": ok,
         "profile": profile.name,
         "target_model": profile.target,
         "drafter": profile.drafter,
+        "drafter_configured": profile.drafter,
+        "drafter_loaded": "unknown",
         "num_speculative_tokens": profile.num_speculative_tokens,
         "tensor_parallel_size": profile.tensor_parallel_size,
         "gateway_version": __version__,
         "required_vllm_min_version": REQUIRED_VLLM_MIN_VERSION,
         "vllm": vllm_status,
-        "target_loaded": target_loaded,
-        "drafter_loaded": drafter_loaded,
+        "version_ok": version_ok,
+        "target_served": target_served,
     }
