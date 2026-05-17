@@ -27,6 +27,18 @@ async def test_health_returns_status():
         assert (await client.health())["status"] == "ok"
 
 
+async def test_health_accepts_empty_success_body():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"")
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="http://vllm.local",
+    ) as http:
+        client = VllmClient(http=http, base_url="http://vllm.local")
+        assert await client.health() == {"status": "ok"}
+
+
 @pytest.mark.asyncio
 async def test_list_models_returns_payload():
     def handler(request: httpx.Request) -> httpx.Response:

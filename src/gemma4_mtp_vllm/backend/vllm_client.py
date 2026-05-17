@@ -27,7 +27,15 @@ class VllmClient:
         await self._http.aclose()
 
     async def health(self) -> dict:
-        return await self._get("/health")
+        response = await self._http.get("/health")
+        if response.status_code >= 400:
+            raise VllmHttpError(
+                status_code=response.status_code,
+                message=response.text,
+            )
+        if not response.content:
+            return {"status": "ok"}
+        return response.json()
 
     async def list_models(self) -> dict:
         return await self._get("/v1/models")
