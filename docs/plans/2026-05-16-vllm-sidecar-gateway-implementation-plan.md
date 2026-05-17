@@ -931,7 +931,6 @@ Expected: import error.
 ```python
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 
 
@@ -953,7 +952,6 @@ class RuntimeState:
             raise ValueError("max_queue_size must be positive")
         self._max_queue_size = max_queue_size
         self._active = 0
-        self._queued = 0
         self._total = 0
         self._rejected = 0
         self._backend_errors = 0
@@ -962,23 +960,20 @@ class RuntimeState:
         self._batch_requests = 0
         self._last_request_id: str | None = None
         self._last_backend_error: str | None = None
-        self._lock = asyncio.Lock()
-        self._semaphore = asyncio.Semaphore(1)
-        self._waiting = 0
 
     @property
     def last_backend_error(self) -> str | None:
         return self._last_backend_error
 
     async def acquire_generation_slot(self) -> _Slot:
-        if self._waiting >= self._max_queue_size + 1 and self._active > 0:
+        # The gateway slot is a synchronous in-memory backstop: vLLM owns
+        # real concurrency through continuous batching, so this layer only
+        # bounds how many requests the gateway will admit before rejecting.
+        # `max_queue_size + 1` gives one active plus `max_queue_size`
+        # acceptable concurrent admissions before the next call raises.
+        if self._active >= self._max_queue_size + 1:
             self._rejected += 1
             raise QueueFull()
-        self._waiting += 1
-        try:
-            await self._semaphore.acquire()
-        finally:
-            self._waiting -= 1
         self._active += 1
         self._total += 1
         return _Slot(state=self)
@@ -986,7 +981,6 @@ class RuntimeState:
     def _release_slot(self) -> None:
         if self._active > 0:
             self._active -= 1
-        self._semaphore.release()
 
     def record_generation(
         self,
@@ -1015,7 +1009,7 @@ class RuntimeState:
     def snapshot(self) -> dict[str, object]:
         return {
             "active_requests": self._active,
-            "queued_requests": max(0, self._waiting),
+            "queued_requests": 0,
             "total_requests": self._total,
             "rejected_requests": self._rejected,
             "backend_errors": self._backend_errors,
@@ -1026,10 +1020,14 @@ class RuntimeState:
         }
 ```
 
-Note: the queue accounting above is intentionally minimal. The semaphore
-allows one active request at a time through the gateway's bounded slot,
-while waiting work counts against `max_queue_size + 1`. vLLM handles
-actual concurrency; the gateway's slot is a memory/timeout backstop.
+Note: this is a pure synchronous slot counter. vLLM handles actual
+concurrency through continuous batching; the gateway's slot only bounds
+admission so the gateway itself cannot pile up unbounded work in memory.
+`queued_requests` stays at zero in the snapshot because there is no
+waiting queue at this layer — backpressure comes from `QueueFull` being
+raised immediately when admission exceeds `max_queue_size + 1`.
+`acquire_generation_slot` stays `async` to keep the interface stable
+under a future real queue, but does not await anything in v0.1.
 
 - [ ] **Step 4: Run passing**
 
