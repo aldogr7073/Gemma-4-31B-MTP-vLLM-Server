@@ -267,6 +267,31 @@ def test_anthropic_count_tokens_uses_word_count():
     assert response.headers["x-gemma4-mtp-token-counting"] == "estimated_word_count"
 
 
+def test_anthropic_count_tokens_rejects_unknown_model():
+    forwarded = False
+
+    def handler(request):
+        nonlocal forwarded
+        forwarded = True
+        return httpx.Response(200, json={"status": "ok"})
+
+    client = _vllm(handler)
+    response = client.post(
+        "/v1/messages/count_tokens",
+        headers={"x-api-key": "secret", "content-type": "application/json"},
+        json={
+            "model": "not-a-model",
+            "messages": [{"role": "user", "content": "hello world"}],
+        },
+    )
+    body = response.json()
+
+    assert response.status_code == 404
+    assert body["type"] == "error"
+    assert body["error"]["type"] == "model_not_found"
+    assert forwarded is False
+
+
 def test_anthropic_rejects_tools():
     def handler(request):
         return httpx.Response(200, json={"status": "ok"})

@@ -551,6 +551,13 @@ def create_app(
                 message=exc.message,
                 protocol="anthropic",
             )
+        if not _alias_known(payload.get("model"), aliases):
+            return protocol_error_response(
+                status_code=404,
+                code="model_not_found",
+                message=f"model {payload.get('model')!r} is not available",
+                protocol="anthropic",
+            )
         text = " ".join(
             str(message.get("content", ""))
             for message in payload.get("messages", [])

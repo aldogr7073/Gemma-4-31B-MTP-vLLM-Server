@@ -60,9 +60,14 @@ A `tp2` profile is also available for 2× 40+ GB GPUs (`tensor_parallel_size: 2`
 
 ## vLLM Version
 
-The gateway is tested against `vllm >= 0.11.0` which ships official Gemma 4
-MTP support via PR #41745. vLLM is an **optional extra** because it pulls
-heavy CUDA / ROCm wheels — install it separately on the GPU host with:
+The gateway requires `vllm >= 0.21.0,<0.22.0` for Gemma 4 MTP. vLLM 0.21.0
+ships official Gemma 4 MTP speculative decoding support via PR #41745.
+Older vLLM releases can fail during initialization or treat the Gemma 4
+assistant checkpoint incorrectly. This matters because older releases can
+mishandle the assistant checkpoint.
+
+vLLM is an **optional extra** because it pulls heavy CUDA / ROCm wheels.
+Install it separately on the GPU host with:
 
 ```bash
 pip install "gemma4-mtp-vllm[vllm]"
@@ -111,8 +116,8 @@ For a GPU host that will also run `vllm serve`:
 python -m pip install -e ".[dev,vllm]"
 ```
 
-The `[vllm]` extra installs `vllm >= 0.11.0`. On NVIDIA hosts that need
-the latest pre-release CUDA wheels:
+The `[vllm]` extra installs `vllm >= 0.21.0,<0.22.0`. On NVIDIA hosts that
+need the latest pre-release CUDA wheels:
 
 ```bash
 uv pip install -U vllm --pre \
@@ -151,8 +156,8 @@ an `--api-key`.
 
 ## Doctor
 
-Verify the vLLM process is reachable and serving the configured target +
-drafter:
+Verify the vLLM process is reachable, new enough for Gemma 4 MTP, and serving
+the configured target model:
 
 ```bash
 vllm-mtp doctor --profile safe80 --vllm-base-url http://127.0.0.1:8000
@@ -161,11 +166,13 @@ vllm-mtp doctor --profile safe80 --vllm-base-url http://127.0.0.1:8000
 Expected output (single-line JSON):
 
 ```json
-{"ok": true, "profile": "safe80", "target_model": "google/gemma-4-31B-it", "drafter": "google/gemma-4-31B-it-assistant", "num_speculative_tokens": 4, "tensor_parallel_size": 1, "gateway_version": "0.1.0", "required_vllm_min_version": "0.11.0", "vllm": {"status": "ok", "version": "0.11.0"}, "target_loaded": true, "drafter_loaded": true}
+{"ok": true, "profile": "safe80", "target_model": "google/gemma-4-31B-it", "drafter": "google/gemma-4-31B-it-assistant", "drafter_configured": "google/gemma-4-31B-it-assistant", "drafter_loaded": "unknown", "num_speculative_tokens": 4, "tensor_parallel_size": 1, "gateway_version": "0.1.0", "required_vllm_min_version": "0.21.0", "vllm": {"status": "ok", "version": "0.21.0"}, "version_ok": true, "target_served": true}
 ```
 
-`ok: false` indicates either vLLM is unreachable or the target / drafter
-model id is not listed in vLLM's `/v1/models`.
+`ok: false` indicates vLLM is unreachable, older than the required version, or
+the target model is not listed in vLLM's `/v1/models`. Real vLLM reports the
+served target model there; the drafter is reported as configured by this
+gateway and `drafter_loaded` remains `unknown`.
 
 ## Benchmark
 
@@ -298,8 +305,8 @@ streaming buffers the upstream chunks before translation in v0.1.
 
 ## Source Archives
 
-Release archives must come from this script or from CI. Do not publish a
-Finder zip or a manually zipped working directory.
+Release archives must come from this script or from CI. Do not publish manually created Finder or desktop zip files.
+Do not share a manually zipped working directory.
 
 ```bash
 scripts/make_source_archive.sh
@@ -317,6 +324,9 @@ macOS metadata entries:
 ```bash
 scripts/verify_source_archive.sh Gemma-4-31B-MTP-vllm-src.zip
 ```
+
+The verifier rejects `.git`, `.venv`, `dist`, `__MACOSX`, `__pycache__`, and
+build/cache entries.
 
 ## Wheel Freshness
 

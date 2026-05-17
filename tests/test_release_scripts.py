@@ -30,6 +30,34 @@ def test_wheel_freshness_script_contains_required_smoke_steps():
     assert "/livez" in script
     assert "x-api-key" in script
     assert "local-dev-key" in script
+    assert '"version": "0.21.0"' in script
+
+
+def test_readme_documents_vllm_mtp_release_requirement():
+    readme = Path("README.md").read_text(encoding="utf-8")
+    assert "vllm >= 0.21.0,<0.22.0" in readme
+    assert "Older vLLM releases" in readme
+    assert "assistant checkpoint" in readme
+
+
+def test_readme_doctor_example_matches_current_shape():
+    readme = Path("README.md").read_text(encoding="utf-8")
+    assert '"required_vllm_min_version": "0.21.0"' in readme
+    assert '"vllm": {"status": "ok", "version": "0.21.0"}' in readme
+    assert '"drafter_configured": "google/gemma-4-31B-it-assistant"' in readme
+    assert '"drafter_loaded": "unknown"' in readme
+    assert '"version_ok": true' in readme
+    assert '"target_served": true' in readme
+    assert "drafter model id is not listed" not in readme
+
+
+def test_readme_warns_against_manual_source_archives():
+    readme = Path("README.md").read_text(encoding="utf-8")
+    assert "Do not publish manually created Finder or desktop zip files" in readme
+    assert "scripts/make_source_archive.sh" in readme
+    for path in (".git", ".venv", "dist", "__MACOSX", "__pycache__"):
+        assert path in readme
+    assert "build/cache entries" in readme
 
 
 def test_verify_source_archive_excludes_forbidden_paths():

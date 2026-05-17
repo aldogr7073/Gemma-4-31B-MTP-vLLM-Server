@@ -30,7 +30,7 @@ from gemma4_mtp_vllm.server.app import create_app
 
 def handler(request):
     if request.url.path in {"/health", "/v1/models", "/version"}:
-        return httpx.Response(200, json={"status": "ok", "data": [], "version": "0.11.0"})
+        return httpx.Response(200, json={"status": "ok", "data": [], "version": "0.21.0"})
     return httpx.Response(404)
 
 
