@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import httpx
+from typer.testing import CliRunner
+
+from gemma4_mtp_vllm.cli import app
+
+
+runner = CliRunner()
+
+
+def test_launch_command_prints_argv():
+    result = runner.invoke(app, ["launch", "--print-only"])
+    assert result.exit_code == 0
+    assert "vllm" in result.stdout
+    assert "serve" in result.stdout
+    assert "google/gemma-4-31B-it" in result.stdout
+
+
+def test_doctor_command_emits_json(monkeypatch):
+    def fake_run(coro):
+        import asyncio
+
+        return asyncio.get_event_loop().run_until_complete(coro)
+
+    def handler(request):
+        if request.url.path == "/health":
+            return httpx.Response(200, json={"status": "ok"})
+        if request.url.path == "/version":
+            return httpx.Response(200, json={"version": "0.11.0"})
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={
+                "data": [
+                    {"id": "google/gemma-4-31B-it"},
+                    {"id": "google/gemma-4-31B-it-assistant"},
+                ],
+            })
+        return httpx.Response(404)
+
+    monkeypatch.setenv("VLLM_MTP_TRANSPORT_MOCK", "1")
+    monkeypatch.setattr(
+        "gemma4_mtp_vllm.cli._mock_transport",
+        lambda: httpx.MockTransport(handler),
+    )
+    result = runner.invoke(
+        app,
+        ["doctor", "--profile", "safe80", "--vllm-base-url", "http://vllm.local:8000"],
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout.strip().splitlines()[-1])
+    assert payload["ok"] is True
+    assert payload["target_loaded"] is True
+
+
+def test_serve_command_rejects_non_loopback_without_key():
+    result = runner.invoke(
+        app,
+        ["serve", "--host", "0.0.0.0"],
+    )
+    assert result.exit_code != 0
+    assert "api-key" in result.stdout.lower() or "api-key" in result.stderr.lower()
