@@ -4,15 +4,26 @@ import asyncio
 import json
 import os
 import sys
+import time
+from dataclasses import replace
+from pathlib import Path
 from typing import Optional
 
 import httpx
 import typer
 
 from gemma4_mtp_vllm import __version__
+from gemma4_mtp_vllm.benchmarking import (
+    BenchmarkObservation,
+    BenchmarkSummary,
+    deterministic_parity,
+    median_optional,
+    speedup,
+)
 from gemma4_mtp_vllm.doctor import build_report
 from gemma4_mtp_vllm.launch import build_vllm_serve_args
 from gemma4_mtp_vllm.profiles import (
+    ModelProfile,
     ProfileSet,
     load_profiles,
     resolve_profile,
@@ -36,6 +47,92 @@ def _build_transport() -> httpx.BaseTransport | None:
     if os.environ.get("VLLM_MTP_TRANSPORT_MOCK") == "1":
         return _mock_transport()
     return None
+
+
+def _request_body(
+    profile: ModelProfile,
+    prompt: str,
+    max_tokens: int,
+    temperature: float,
+    top_p: float,
+) -> dict:
+    return {
+        "model": profile.target,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "top_p": top_p,
+    }
+
+
+def _http_client(base_url: str) -> httpx.AsyncClient:
+    transport = _build_transport()
+    if transport is not None:
+        return httpx.AsyncClient(
+            transport=transport, base_url=base_url, timeout=120.0
+        )
+    return httpx.AsyncClient(base_url=base_url, timeout=120.0)
+
+
+async def _measure(
+    base_url: str,
+    body: dict,
+) -> tuple[str, float]:
+    async with _http_client(base_url) as http:
+        start = time.perf_counter()
+        response = await http.post("/v1/chat/completions", json=body)
+        elapsed = time.perf_counter() - start
+        response.raise_for_status()
+        payload = response.json()
+    text = payload["choices"][0]["message"]["content"]
+    completion_tokens = (payload.get("usage") or {}).get("completion_tokens") or 1
+    # Test seam: handlers can inject a deterministic TPS value to keep
+    # in-process MockTransport timing-independent.
+    test_tps = payload.get("vllm_tps_for_test")
+    if isinstance(test_tps, (int, float)):
+        return text, float(test_tps)
+    tps = completion_tokens / elapsed if elapsed > 0 else None
+    return text, float(tps) if tps else 0.0
+
+
+async def _single_bench(
+    *,
+    profile: ModelProfile,
+    prompt: str,
+    max_tokens: int,
+    mtp_url: str,
+    baseline_url: str,
+    runs: int,
+    warmup_runs: int,
+) -> list[BenchmarkObservation]:
+    body = _request_body(
+        profile,
+        prompt=prompt,
+        max_tokens=max_tokens,
+        temperature=0.0,
+        top_p=1.0,
+    )
+
+    for _ in range(warmup_runs):
+        await _measure(mtp_url, body)
+        await _measure(baseline_url, body)
+
+    observations: list[BenchmarkObservation] = []
+    for idx in range(1, runs + 1):
+        mtp_text, mtp_tps = await _measure(mtp_url, body)
+        no_text, no_tps = await _measure(baseline_url, body)
+        observations.append(
+            BenchmarkObservation(
+                index=idx,
+                no_draft_generation_tps=no_tps,
+                mtp_generation_tps=mtp_tps,
+                speedup=speedup(no_tps, mtp_tps),
+                deterministic_parity=deterministic_parity(
+                    no_text, mtp_text, temperature=0.0, top_p=1.0
+                ),
+            )
+        )
+    return observations
 
 
 @app.command()
@@ -177,9 +274,38 @@ def bench(
     warmup_runs: int = typer.Option(1, "--warmup-runs"),
     json_output: Optional[str] = typer.Option(None, "--json-output"),
 ) -> None:
-    """Filled in Task 18."""
-    typer.echo("bench: pending Task 18", err=True)
-    raise typer.Exit(code=2)
+    """Compare MTP vs baseline vLLM endpoints for a single prompt."""
+    selected = resolve_profile(profile, _profile_set())
+    observations = asyncio.run(
+        _single_bench(
+            profile=selected,
+            prompt=prompt,
+            max_tokens=max_tokens,
+            mtp_url=mtp_url,
+            baseline_url=baseline_url,
+            runs=runs,
+            warmup_runs=warmup_runs,
+        )
+    )
+    summary = BenchmarkSummary(
+        profile=selected.name,
+        prompt_name="default",
+        prompt=prompt,
+        num_speculative_tokens=selected.num_speculative_tokens,
+        observations=observations,
+        median_no_draft_generation_tps=median_optional(
+            [obs.no_draft_generation_tps for obs in observations]
+        ),
+        median_mtp_generation_tps=median_optional(
+            [obs.mtp_generation_tps for obs in observations]
+        ),
+        median_speedup=median_optional([obs.speedup for obs in observations]),
+    )
+    payload = summary.to_dict()
+    rendered = json.dumps(payload, indent=2)
+    if json_output:
+        Path(json_output).write_text(rendered, encoding="utf-8")
+    typer.echo(rendered)
 
 
 @app.command("bench-matrix")
@@ -195,6 +321,53 @@ def bench_matrix(
     warmup_runs: int = typer.Option(1, "--warmup-runs"),
     json_output: Optional[str] = typer.Option(None, "--json-output"),
 ) -> None:
-    """Filled in Task 18."""
-    typer.echo("bench-matrix: pending Task 18", err=True)
-    raise typer.Exit(code=2)
+    """Sweep MTP vs baseline across prompts x num_speculative_tokens."""
+    if not prompt:
+        typer.echo("at least one --prompt required", err=True)
+        raise typer.Exit(code=2)
+    if not num_speculative_tokens:
+        typer.echo("at least one --num-speculative-tokens required", err=True)
+        raise typer.Exit(code=2)
+    if any(value <= 0 for value in num_speculative_tokens):
+        typer.echo("--num-speculative-tokens must be positive", err=True)
+        raise typer.Exit(code=2)
+
+    selected_base = resolve_profile(profile, _profile_set())
+    results: list[dict] = []
+    # Use enumerate() rather than prompt.index(prompt_value) so duplicate
+    # prompts get distinct prompt_name labels.
+    for prompt_index, prompt_value in enumerate(prompt, start=1):
+        for n in num_speculative_tokens:
+            # dataclasses.replace() is the canonical copy-with-override for
+            # frozen dataclasses; avoids touching the private __dict__.
+            adjusted = replace(selected_base, num_speculative_tokens=n)
+            observations = asyncio.run(
+                _single_bench(
+                    profile=adjusted,
+                    prompt=prompt_value,
+                    max_tokens=64,
+                    mtp_url=mtp_url,
+                    baseline_url=baseline_url,
+                    runs=runs,
+                    warmup_runs=warmup_runs,
+                )
+            )
+            summary = BenchmarkSummary(
+                profile=adjusted.name,
+                prompt_name=f"prompt_{prompt_index}",
+                prompt=prompt_value,
+                num_speculative_tokens=n,
+                observations=observations,
+                median_no_draft_generation_tps=median_optional(
+                    [obs.no_draft_generation_tps for obs in observations]
+                ),
+                median_mtp_generation_tps=median_optional(
+                    [obs.mtp_generation_tps for obs in observations]
+                ),
+                median_speedup=median_optional([obs.speedup for obs in observations]),
+            )
+            results.append(summary.to_dict())
+    rendered = json.dumps(results, indent=2)
+    if json_output:
+        Path(json_output).write_text(rendered, encoding="utf-8")
+    typer.echo(rendered)
