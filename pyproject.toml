@@ -6,6 +6,10 @@ build-backend = "hatchling.build"
 name = "gemma4-mtp-vllm"
 version = "0.1.0"
 description = "Gemma 4 31B MTP local API gateway on vLLM"
+license = "Apache-2.0"
+authors = [
+    { name = "Alican Kiraz" },
+]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -40,3 +44,6 @@ vllm-mtp = "gemma4_mtp_vllm.cli:app"
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 asyncio_mode = "auto"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gemma4_mtp_vllm"]
