@@ -35,6 +35,21 @@ def test_launch_command_prints_shell_safe_mtp_argv():
     assert spec["method"] == "mtp"
 
 
+def test_launch_rejects_public_raw_vllm_without_explicit_allow():
+    result = runner.invoke(app, ["launch", "--host", "0.0.0.0", "--print-only"])
+    assert result.exit_code != 0
+    assert "--allow-public-vllm" in result.stdout or "--allow-public-vllm" in result.stderr
+
+
+def test_launch_allows_public_raw_vllm_with_explicit_flag():
+    result = runner.invoke(
+        app,
+        ["launch", "--host", "0.0.0.0", "--allow-public-vllm", "--print-only"],
+    )
+    assert result.exit_code == 0
+    assert "--host 0.0.0.0" in result.stdout
+
+
 def test_doctor_command_emits_json(monkeypatch):
     def fake_run(coro):
         return asyncio.get_event_loop().run_until_complete(coro)

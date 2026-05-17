@@ -12,6 +12,7 @@ from typing import Optional
 
 import httpx
 import typer
+import uvicorn
 
 from gemma4_mtp_vllm import __version__
 from gemma4_mtp_vllm.benchmarking import (
@@ -29,8 +30,9 @@ from gemma4_mtp_vllm.profiles import (
     load_profiles,
     resolve_profile,
 )
-from gemma4_mtp_vllm.server.bind_policy import bind_host_requires_api_key
 from gemma4_mtp_vllm.server.app import DEFAULT_MODEL_ALIAS
+from gemma4_mtp_vllm.server.app import create_app
+from gemma4_mtp_vllm.server.bind_policy import bind_host_requires_api_key
 from gemma4_mtp_vllm.server.limits import ServerLimits
 
 app = typer.Typer(add_completion=False, help="Gemma 4 31B MTP vLLM sidecar gateway")
@@ -168,7 +170,15 @@ def launch(
     port: int = typer.Option(8000, "--port"),
     print_only: bool = typer.Option(False, "--print-only"),
     no_mtp: bool = typer.Option(False, "--no-mtp"),
+    allow_public_vllm: bool = typer.Option(False, "--allow-public-vllm"),
 ) -> None:
+    if bind_host_requires_api_key(host) and not allow_public_vllm:
+        typer.echo(
+            "raw vLLM should stay on loopback; pass --allow-public-vllm to expose it",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
     selected = resolve_profile(profile, _profile_set())
     args = build_vllm_serve_args(
         profile=selected,
@@ -201,10 +211,6 @@ def serve(
     if bind_host_requires_api_key(host) and not api_key:
         typer.echo(f"host {host} requires --api-key", err=True)
         raise typer.Exit(code=1)
-
-    import uvicorn
-
-    from gemma4_mtp_vllm.server.app import create_app
 
     limits = ServerLimits(
         max_body_bytes=int(max_body_mb * 1024 * 1024),

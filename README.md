@@ -302,6 +302,9 @@ streaming buffers the upstream chunks before translation in v0.1.
   rejecting; real concurrency is handled by vLLM's continuous batcher.
 - CORS is default-deny; add `--cors-origin` for explicit browser clients.
 - Non-loopback bind hosts require an `--api-key`.
+- Keep raw `vllm serve` bound to `127.0.0.1` unless you explicitly accept that
+  it has no gateway auth, rate limit, or CORS protection. Expose only the gateway
+  for normal use.
 
 ## Source Archives
 
