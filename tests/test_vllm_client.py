@@ -57,6 +57,17 @@ async def test_list_models_returns_payload():
 
 
 @pytest.mark.asyncio
+async def test_list_models_rejects_empty_success_body():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/models"
+        return httpx.Response(200, content=b"")
+
+    async with _client(handler) as client:
+        with pytest.raises(json.JSONDecodeError):
+            await client.list_models()
+
+
+@pytest.mark.asyncio
 async def test_chat_completion_proxies_body_and_returns_json():
     captured: dict = {}
 

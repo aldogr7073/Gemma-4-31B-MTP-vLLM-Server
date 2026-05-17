@@ -21,3 +21,7 @@ def test_version_at_least_ignores_suffix() -> None:
 
 def test_version_at_least_rejects_missing_value() -> None:
     assert not version_at_least(None, "0.21.0")
+
+
+def test_version_at_least_rejects_unparsable_value() -> None:
+    assert not version_at_least("not-a-version", "0.21.0")
