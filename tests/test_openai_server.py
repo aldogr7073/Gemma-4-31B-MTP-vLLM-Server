@@ -229,6 +229,46 @@ def test_completions_endpoint():
     assert response.json()["choices"][0]["text"] == "World"
 
 
+def test_completions_accepts_empty_string_prompt_and_forwards():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/health":
+            return httpx.Response(200, json={"status": "ok"})
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"object": "list", "data": []})
+        if request.url.path == "/version":
+            return httpx.Response(200, json={"version": "0.11.0"})
+        if request.url.path == "/v1/completions":
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "id": "cmpl-empty",
+                    "object": "text_completion",
+                    "choices": [{"text": "World", "finish_reason": "stop", "index": 0}],
+                    "usage": {"prompt_tokens": 0, "completion_tokens": 1, "total_tokens": 1},
+                },
+            )
+        return httpx.Response(404)
+
+    client = TestClient(
+        create_app(
+            api_key="secret",
+            vllm_base_url="http://vllm.local:8000",
+            vllm_transport=httpx.MockTransport(handler),
+        )
+    )
+    response = client.post(
+        "/v1/completions",
+        headers={"x-api-key": "secret", "content-type": "application/json"},
+        json={"model": "gemma-4-31b-mtp", "prompt": "", "max_tokens": 4},
+    )
+    assert response.status_code == 200
+    assert response.json()["choices"][0]["text"] == "World"
+    assert captured["body"]["prompt"] == ""
+
+
 def test_completions_rejects_bad_max_tokens_without_forwarding():
     CAPTURED.clear()
     response = _client().post(

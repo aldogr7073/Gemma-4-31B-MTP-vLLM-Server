@@ -48,6 +48,8 @@ PUBLIC_PATHS = {"/livez"}
 async def _bounded_json(
     request: Request,
     max_bytes: int,
+    *,
+    protocol: str = "openai",
 ) -> dict[str, Any] | JSONResponse:
     body = await request.body()
     if len(body) > max_bytes:
@@ -55,6 +57,7 @@ async def _bounded_json(
             status_code=413,
             code="request_too_large",
             message=f"request body must be at most {max_bytes} bytes",
+            protocol=protocol,
         )
     try:
         parsed = json.loads(body)
@@ -63,12 +66,14 @@ async def _bounded_json(
             status_code=400,
             code="invalid_request",
             message="request body must be valid JSON",
+            protocol=protocol,
         )
     if not isinstance(parsed, dict):
         return protocol_error_response(
             status_code=400,
             code="invalid_request",
             message="request body must be a JSON object",
+            protocol=protocol,
         )
     return parsed
 
@@ -383,7 +388,11 @@ def create_app(
 
     @app.post("/v1/messages")
     async def anthropic_messages(request: Request):
-        payload = await _bounded_json(request, server_limits.max_body_bytes)
+        payload = await _bounded_json(
+            request,
+            server_limits.max_body_bytes,
+            protocol="anthropic",
+        )
         if isinstance(payload, JSONResponse):
             return payload
         try:
@@ -470,7 +479,11 @@ def create_app(
 
     @app.post("/v1/messages/count_tokens")
     async def anthropic_count_tokens(request: Request) -> JSONResponse:
-        payload = await _bounded_json(request, server_limits.max_body_bytes)
+        payload = await _bounded_json(
+            request,
+            server_limits.max_body_bytes,
+            protocol="anthropic",
+        )
         if isinstance(payload, JSONResponse):
             return payload
         try:

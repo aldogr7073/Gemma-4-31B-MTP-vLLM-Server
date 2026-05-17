@@ -146,6 +146,70 @@ def test_anthropic_rejects_tools():
     assert response.json()["error"]["type"] == "unsupported_feature"
 
 
+def test_anthropic_messages_malformed_json_uses_anthropic_error_shape():
+    def handler(request):
+        return httpx.Response(200, json={"status": "ok"})
+
+    client = _vllm(handler)
+    response = client.post(
+        "/v1/messages",
+        headers={"x-api-key": "secret", "content-type": "application/json"},
+        content=b"{",
+    )
+    body = response.json()
+    assert response.status_code == 400
+    assert body["type"] == "error"
+    assert body["error"]["type"] == "invalid_request"
+
+
+def test_anthropic_messages_non_object_json_uses_anthropic_error_shape():
+    def handler(request):
+        return httpx.Response(200, json={"status": "ok"})
+
+    client = _vllm(handler)
+    response = client.post(
+        "/v1/messages",
+        headers={"x-api-key": "secret", "content-type": "application/json"},
+        content=b"[]",
+    )
+    body = response.json()
+    assert response.status_code == 400
+    assert body["type"] == "error"
+    assert body["error"]["type"] == "invalid_request"
+
+
+def test_anthropic_count_tokens_malformed_json_uses_anthropic_error_shape():
+    def handler(request):
+        return httpx.Response(200, json={"status": "ok"})
+
+    client = _vllm(handler)
+    response = client.post(
+        "/v1/messages/count_tokens",
+        headers={"x-api-key": "secret", "content-type": "application/json"},
+        content=b"{",
+    )
+    body = response.json()
+    assert response.status_code == 400
+    assert body["type"] == "error"
+    assert body["error"]["type"] == "invalid_request"
+
+
+def test_anthropic_count_tokens_non_object_json_uses_anthropic_error_shape():
+    def handler(request):
+        return httpx.Response(200, json={"status": "ok"})
+
+    client = _vllm(handler)
+    response = client.post(
+        "/v1/messages/count_tokens",
+        headers={"x-api-key": "secret", "content-type": "application/json"},
+        content=b"[]",
+    )
+    body = response.json()
+    assert response.status_code == 400
+    assert body["type"] == "error"
+    assert body["error"]["type"] == "invalid_request"
+
+
 def test_anthropic_messages_rejects_bad_max_tokens():
     forwarded = False
 

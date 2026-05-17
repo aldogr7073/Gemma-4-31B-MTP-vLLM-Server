@@ -59,12 +59,12 @@ def _require_model(payload: dict[str, Any]) -> None:
 
 def _require_prompt(payload: dict[str, Any]) -> None:
     value = payload.get("prompt")
-    if _is_non_empty_str(value):
+    if isinstance(value, str):
         return
     if isinstance(value, list) and value:
-        if all(_is_non_empty_str(item) for item in value):
+        if all(isinstance(item, str) for item in value):
             return
-    raise RequestValidationError("prompt must be a non-empty string or list of strings")
+    raise RequestValidationError("prompt must be a string or non-empty list of strings")
 
 
 def _require_positive_int(payload: dict[str, Any], field: str) -> None:
