@@ -1,0 +1,28 @@
+default: safe80
+aliases:
+  default: safe80
+  gemma-4-31b-mtp: safe80
+  claude-gemma-4-31b-mtp: safe80
+profiles:
+  safe80:
+    target: google/gemma-4-31B-it
+    drafter: google/gemma-4-31B-it-assistant
+    num_speculative_tokens: 4
+    tensor_parallel_size: 1
+    gpu_memory_utilization: 0.90
+    max_model_len: 32768
+    temperature: 0.0
+    top_p: 1.0
+    top_k: 0
+    requires_vram_gb: 80
+  tp2:
+    target: google/gemma-4-31B-it
+    drafter: google/gemma-4-31B-it-assistant
+    num_speculative_tokens: 4
+    tensor_parallel_size: 2
+    gpu_memory_utilization: 0.90
+    max_model_len: 32768
+    temperature: 0.0
+    top_p: 1.0
+    top_k: 0
+    requires_vram_gb: 40
